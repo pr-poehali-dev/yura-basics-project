@@ -42,6 +42,8 @@ const AdminPanel = () => {
   const [adminPassword, setAdminPassword] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeTab, setActiveTab] = useState('products');
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [notifications, setNotifications] = useState<{id: string, message: string, type: 'order' | 'message', timestamp: Date}[]>([]);
 
   // Sample data
   const [products, setProducts] = useState<Product[]>([
@@ -106,6 +108,8 @@ const AdminPanel = () => {
     inStock: true
   });
 
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+
   const handleLogin = () => {
     if (adminPassword === 'admin123') {
       setIsAuthenticated(true);
@@ -123,12 +127,47 @@ const AdminPanel = () => {
         description: newProduct.description || '',
         price: newProduct.price,
         category: newProduct.category,
-        image: newProduct.image || '/img/64c52779-76df-4010-94ed-fff55e612cc1.jpg',
+        image: uploadedImage || newProduct.image || '/img/64c52779-76df-4010-94ed-fff55e612cc1.jpg',
         inStock: newProduct.inStock || true
       };
       setProducts([...products, product]);
       setNewProduct({ name: '', description: '', price: '', category: '', image: '', inStock: true });
+      setUploadedImage(null);
     }
+  };
+
+  const handleUpdateProduct = () => {
+    if (editingProduct) {
+      setProducts(products.map(p => 
+        p.id === editingProduct.id ? {
+          ...editingProduct,
+          image: uploadedImage || editingProduct.image
+        } : p
+      ));
+      setEditingProduct(null);
+      setUploadedImage(null);
+    }
+  };
+
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setUploadedImage(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const addNotification = (message: string, type: 'order' | 'message') => {
+    const notification = {
+      id: Date.now().toString(),
+      message,
+      type,
+      timestamp: new Date()
+    };
+    setNotifications(prev => [notification, ...prev.slice(0, 9)]);
   };
 
   const handleDeleteProduct = (id: string) => {
@@ -139,12 +178,19 @@ const AdminPanel = () => {
     setOrders(orders.map(order => 
       order.id === orderId ? { ...order, status: newStatus } : order
     ));
+    if (newStatus === 'processing') {
+      addNotification(`Заказ #${orderId} взят в работу`, 'order');
+    }
   };
 
   const handleMarkMessageAsRead = (messageId: string) => {
     setChatMessages(chatMessages.map(msg => 
       msg.id === messageId ? { ...msg, status: 'read' } : msg
     ));
+    const message = chatMessages.find(m => m.id === messageId);
+    if (message) {
+      addNotification(`Сообщение от ${message.customerName} прочитано`, 'message');
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -170,12 +216,19 @@ const AdminPanel = () => {
   if (!isOpen) {
     return (
       <div className="fixed bottom-6 left-6 z-50">
-        <Button
-          onClick={() => setIsOpen(true)}
-          className="w-14 h-14 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 shadow-lg"
-        >
-          <Icon name="Settings" size={24} className="text-white" />
-        </Button>
+        <div className="relative">
+          <Button
+            onClick={() => setIsOpen(true)}
+            className="w-14 h-14 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 shadow-lg"
+          >
+            <Icon name="Settings" size={24} className="text-white" />
+          </Button>
+          {notifications.length > 0 && (
+            <div className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center">
+              <span className="text-xs text-white font-bold">{notifications.length}</span>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -294,6 +347,28 @@ const AdminPanel = () => {
                           <SelectItem value="Аксессуары">Аксессуары</SelectItem>
                         </SelectContent>
                       </Select>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-purple-200">Загрузить фото</label>
+                        <Input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageUpload}
+                          className="bg-purple-800/50 border-purple-700/50 text-purple-100"
+                        />
+                        {uploadedImage && (
+                          <div className="relative">
+                            <img src={uploadedImage} alt="Preview" className="w-full h-32 object-cover rounded-lg" />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setUploadedImage(null)}
+                              className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white"
+                            >
+                              <Icon name="X" size={16} />
+                            </Button>
+                          </div>
+                        )}
+                      </div>
                       <Button onClick={handleAddProduct} className="w-full bg-gradient-to-r from-purple-600 to-pink-600">
                         Добавить товар
                       </Button>
@@ -311,14 +386,24 @@ const AdminPanel = () => {
                           <CardTitle className="text-white text-sm">{product.name}</CardTitle>
                           <CardDescription className="text-purple-200">{product.description}</CardDescription>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDeleteProduct(product.id)}
-                          className="text-red-400 hover:text-red-300"
-                        >
-                          <Icon name="Trash2" size={16} />
-                        </Button>
+                        <div className="flex space-x-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setEditingProduct(product)}
+                            className="text-blue-400 hover:text-blue-300"
+                          >
+                            <Icon name="Edit" size={16} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteProduct(product.id)}
+                            className="text-red-400 hover:text-red-300"
+                          >
+                            <Icon name="Trash2" size={16} />
+                          </Button>
+                        </div>
                       </div>
                     </CardHeader>
                     <CardContent>
@@ -332,6 +417,103 @@ const AdminPanel = () => {
                   </Card>
                 ))}
               </div>
+              
+              {/* Edit Product Dialog */}
+              {editingProduct && (
+                <Dialog open={!!editingProduct} onOpenChange={() => setEditingProduct(null)}>
+                  <DialogContent className="bg-purple-900 border-purple-600">
+                    <DialogHeader>
+                      <DialogTitle className="text-white">Редактировать товар</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <Input
+                        placeholder="Название товара"
+                        value={editingProduct.name}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
+                        className="bg-purple-800/50 border-purple-700/50 text-purple-100"
+                      />
+                      <Textarea
+                        placeholder="Описание"
+                        value={editingProduct.description}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, description: e.target.value })}
+                        className="bg-purple-800/50 border-purple-700/50 text-purple-100"
+                      />
+                      <Input
+                        placeholder="Цена (₽)"
+                        value={editingProduct.price}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, price: e.target.value })}
+                        className="bg-purple-800/50 border-purple-700/50 text-purple-100"
+                      />
+                      <Select value={editingProduct.category} onValueChange={(value) => setEditingProduct({ ...editingProduct, category: value })}>
+                        <SelectTrigger className="bg-purple-800/50 border-purple-700/50 text-purple-100">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Вейпы">Вейпы</SelectItem>
+                          <SelectItem value="Жидкости">Жидкости</SelectItem>
+                          <SelectItem value="Кальян">Кальян</SelectItem>
+                          <SelectItem value="Аксессуары">Аксессуары</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-purple-200">Изменить фото</label>
+                        <Input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageUpload}
+                          className="bg-purple-800/50 border-purple-700/50 text-purple-100"
+                        />
+                        {(uploadedImage || editingProduct.image) && (
+                          <div className="relative">
+                            <img 
+                              src={uploadedImage || editingProduct.image} 
+                              alt="Preview" 
+                              className="w-full h-32 object-cover rounded-lg" 
+                            />
+                            {uploadedImage && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setUploadedImage(null)}
+                                className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white"
+                              >
+                                <Icon name="X" size={16} />
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="inStock"
+                          checked={editingProduct.inStock}
+                          onChange={(e) => setEditingProduct({ ...editingProduct, inStock: e.target.checked })}
+                          className="rounded"
+                        />
+                        <label htmlFor="inStock" className="text-sm font-medium text-purple-200">
+                          В наличии
+                        </label>
+                      </div>
+                      <div className="flex space-x-2">
+                        <Button 
+                          onClick={handleUpdateProduct} 
+                          className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600"
+                        >
+                          Сохранить изменения
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          onClick={() => setEditingProduct(null)}
+                          className="border-purple-600 text-purple-200 hover:bg-purple-800"
+                        >
+                          Отмена
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              )}
             </TabsContent>
 
             <TabsContent value="orders" className="space-y-4">
@@ -428,7 +610,51 @@ const AdminPanel = () => {
             </TabsContent>
 
             <TabsContent value="analytics" className="space-y-4">
-              <h3 className="text-lg font-semibold text-white">Аналитика</h3>
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold text-white">Аналитика</h3>
+                {notifications.length > 0 && (
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setNotifications([])}
+                    className="border-purple-600 text-purple-200 hover:bg-purple-800"
+                  >
+                    Очистить уведомления
+                  </Button>
+                )}
+              </div>
+              
+              {/* Notifications */}
+              {notifications.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-md font-semibold text-white">Последние уведомления</h4>
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {notifications.map((notification) => (
+                      <Card key={notification.id} className="bg-purple-800/50 border-purple-700/50 p-3">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start space-x-2">
+                            <Icon 
+                              name={notification.type === 'order' ? 'ShoppingCart' : 'MessageCircle'} 
+                              size={16} 
+                              className="text-pink-400 mt-0.5" 
+                            />
+                            <div>
+                              <p className="text-sm text-purple-200">{notification.message}</p>
+                              <p className="text-xs text-purple-400">
+                                {notification.timestamp.toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                          <Badge variant={notification.type === 'order' ? 'default' : 'secondary'}>
+                            {notification.type === 'order' ? 'Заказ' : 'Сообщение'}
+                          </Badge>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <Card className="bg-purple-800/50 border-purple-700/50">
                   <CardContent className="p-6">
