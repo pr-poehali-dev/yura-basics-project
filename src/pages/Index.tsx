@@ -4,6 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import Icon from "@/components/ui/icon";
+import ChatBot from "@/components/ChatBot";
+import AdminPanel from "@/components/AdminPanel";
 
 const Index = () => {
   const products = [
@@ -382,6 +384,12 @@ const Index = () => {
           </div>
         </div>
       </footer>
+
+      {/* Chat Bot */}
+      <ChatBot />
+      
+      {/* Admin Panel */}
+      <AdminPanel />
     </div>
   );
 };
